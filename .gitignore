@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 *.log
 server.log
+build/
+dist/
+*.spec

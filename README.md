@@ -2,7 +2,16 @@
 
 Browser-based remote access for your own Windows PC. Runs a small FastAPI server locally and lets you view + control your desktop from any browser on the same machine (or LAN, if you change the bind address).
 
-## Quick start
+## Download
+
+Get the latest release from the [Releases page](https://github.com/Rion-beta-development/remote-pc/releases):
+
+- **`Remote-PC-Setup-1.0.0.exe`** — Installer. Downloads, runs the setup wizard, and adds Remote-PC to your Start Menu. Recommended.
+- **`Remote-PC-1.0.0-portable.exe`** — Portable single exe. No installation; just run it.
+
+Then launch Remote-PC and open `http://127.0.0.1:8765` in your browser. The default password is **admin** — change it by setting the `REMOTE_PC_PASSWORD` environment variable before launching (see below).
+
+## Quick start (from source)
 
 1. Double-click `start.bat` (or run `python server.py` in the folder).
 2. Open `http://127.0.0.1:8765` in your browser.
@@ -57,3 +66,16 @@ start.bat
 - `server.py` — FastAPI server (screen capture + WebSocket + input injection)
 - `static/index.html` — Browser client (screen viewer + input capture)
 - `start.bat` — Convenience launcher
+- `installer/Remote-PC.iss` — Inno Setup script used to build the Windows installer
+- `assets/` — App icon (PNG + ICO)
+
+## Build from source
+
+Requires Python 3.11+.
+
+1. Install dependencies: `pip install pyinstaller fastapi "uvicorn[standard]" mss pillow pynput`
+2. Build the exe (from the repo root):
+   ```
+   python -m PyInstaller --onefile --name remote-pc --icon assets/icon.ico --add-data "static;static" server.py
+   ```
+3. (Optional) Build the installer with [Inno Setup 6](https://jrsoftware.org/isinfo.php): compile `installer/Remote-PC.iss`.
