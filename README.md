@@ -1,100 +1,97 @@
 # Remote-PC
 
-Browser-based remote access for your own Windows PC. Runs a small FastAPI server locally and lets you view + control your desktop from any browser on the same machine (or LAN, if you change the bind address).
+Browser-based remote access for your own Windows PC — now with a desktop app and a modern web client.
+
+Remote-PC runs a small FastAPI server on your machine and lets you view + control your desktop from any browser — on the same computer, on your LAN, or anywhere on the internet via a temporary public link.
 
 ## Download
 
 Get the latest release from the [Releases page](https://github.com/Rion-beta-development/remote-pc/releases):
 
-- **`Remote-PC-Setup-1.1.0.exe`** — Installer. Downloads, runs the setup wizard, and adds Remote-PC to your Start Menu. Recommended.
-- **`Remote-PC-1.1.0-portable.exe`** — Portable single exe. No installation; just run it.
+- **`Remote-PC-Setup-2.0.0.exe`** — Installer. Adds Remote-PC to your Start Menu. Recommended.
+- **`Remote-PC-2.0.0-portable.exe`** — Portable single exe. No installation; just run it.
 
-Then launch Remote-PC and open `http://127.0.0.1:8765` in your browser. The default password is **admin** — change it by setting the `REMOTE_PC_PASSWORD` environment variable before launching (see below).
+No Python required — both are standalone builds.
 
-## Quick start (from source)
+## The desktop app
 
-1. Double-click `start.bat` (or run `python server.py` in the folder).
-2. Open `http://127.0.0.1:8765` in your browser.
-3. Enter the password (default: **admin**).
-4. Click the screen to capture input, then move your mouse / type to control the PC.
+The app opens a control window:
+
+- **Start/Stop** the server with one button
+- **Open** the local address (`http://127.0.0.1:8765`) or copy it
+- **Set a password** — saved to `%APPDATA%\Remote-PC\settings.json` (the `REMOTE_PC_PASSWORD` env var still overrides it)
+- **Temporary public link** — one click creates a `https://…trycloudflare.com` URL for internet access, with a Copy button
+- **Auto-open** the browser when the server starts
+- A **log** of server activity
+
+Closing the window does not stop the server — the app keeps running in the **system tray** (near the clock). From the tray menu you can reopen the window, open the web UI, copy the public link, or quit (which stops everything).
+
+## The web client
+
+Modern dark UI, served by the app:
+
+- Branded login screen with show-password and **clear error messages** (wrong password vs. server unreachable)
+- Smooth screen streaming with FPS and scale readouts
+- **Fit / zoom** modes and fullscreen
+- **Click to take control**, with an on/off toggle for input
+- **Ctrl+V paste** — clipboard text is typed on the remote PC
+- **Task Manager** button (Ctrl+Shift+Esc — honest replacement for Ctrl+Alt+Del, which Windows does not allow software to send)
+- Automatic reconnect with backoff when the connection drops
 
 ## Access from the internet (temporary public link)
 
-Run with `--tunnel` to get a **temporary public HTTPS link** (via a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)) — no router config, no account needed:
+In the desktop app, click **Enable public link**. It creates a **temporary HTTPS link** via a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) — no router config, no account needed. The link stops working when you disable it or quit the app.
 
-- **From source:** double-click `start-tunnel.bat` (or run `python server.py --tunnel`).
-- **Installed:** launch **Remote-PC (Public Link)** from the Start Menu.
+This requires the free `cloudflared` binary — on Windows it is installed automatically via `winget` the first time you enable the link; otherwise install it from [cloudflare/cloudflared](https://github.com/cloudflare/cloudflared/releases).
 
-The console prints a `https://…trycloudflare.com` link that works from any browser, anywhere. The link dies when you close Remote-PC (Ctrl+C or close the window).
-
-This requires the free `cloudflared` binary — on Windows it is installed automatically via `winget` the first time you use `--tunnel`; otherwise install it manually from [cloudflare/cloudflared](https://github.com/cloudflare/cloudflared/releases).
-
-> ⚠️ **Anyone with the link and your password can fully control your PC over the internet.** Always set a strong password first:
-> ```
-> set REMOTE_PC_PASSWORD=your-strong-password
-> ```
-> Traffic between the browser and Cloudflare is HTTPS; the last hop (Cloudflare → your PC) is plain HTTP on localhost.
-
-## Stop the server
-
-To stop Remote-PC:
-
-- **From `start.bat`:** Press `Ctrl+C` in the terminal window, or close the window.
-- **From `python server.py`:** Press `Ctrl+C` in the terminal.
-- **From Task Manager:** End any `python.exe` process running `server.py`.
-- **Force kill (all Python processes):** Open PowerShell and run:
-  ```powershell
-  Get-Process python | Where-Object { $_.MainWindowTitle -like '*server*' } | Stop-Process
-  ```
-  Or from Command Prompt:
-  ```cmd
-  taskkill /F /IM python.exe
-  ```
-
-After stopping, the server will no longer be reachable at `http://127.0.0.1:8765`. Restart it with `start.bat` when you need it again.
-
-## Change the password
-
-Set the environment variable before launching:
+From the command line (source or portable exe), `--tunnel` does the same:
 
 ```
-set REMOTE_PC_PASSWORD=your-strong-password
-start.bat
+python server.py --tunnel
+remote-pc.exe --tunnel
 ```
+
+> ⚠️ **Anyone with the link and your password can fully control your PC.** Set a strong password in the app before enabling the public link.
+
+## Command-line flags
+
+| Flag | Effect |
+|---|---|
+| *(no flags)* | Desktop app (window + system tray) |
+| `--tunnel` | Desktop app, with the public link enabled at startup |
+| `--console` | Headless server, no window (like the old behavior) |
 
 ## How it works
 
-- `server.py` captures your screen with `mss`, compresses to JPEG, and streams frames over a WebSocket.
-- The browser client (`static/index.html`) displays the stream and captures mouse/keyboard events, sending them back over WebSocket.
-- `pynput` injects the input locally on your machine.
-- The server binds to `127.0.0.1` (localhost) by default — only your own PC can reach it.
-
-## Security warnings
-
-⚠️ This is a **personal prototype**, not hardened remote-access software.
-
-- **Do not expose port 8765 to the internet.** If you need access from outside your LAN, use a VPN (Tailscale, WireGuard, etc.) or an SSH tunnel — never open the raw port.
-- The default password is `admin`. Change it with `REMOTE_PC_PASSWORD`.
-- Traffic between browser and server is plain HTTP/WS (no TLS). On localhost this is fine; across a LAN it is sniffable.
-- Anyone who can reach `http://<your-pc>:8765` and knows the password can control your mouse and keyboard.
-
-## Files
-
+- `app.py` — desktop app (customtkinter window + pystray tray); runs the server in a background thread
 - `server.py` — FastAPI server (screen capture + WebSocket + input injection)
-- `tunnel.py` — Temporary public link via Cloudflare quick tunnel (`--tunnel`)
-- `static/index.html` — Browser client (screen viewer + input capture)
-- `start.bat` — Convenience launcher
-- `start-tunnel.bat` — Launcher with a temporary public link (`--tunnel`)
-- `installer/Remote-PC.iss` — Inno Setup script used to build the Windows installer
-- `assets/` — App icon (PNG + ICO)
+- `tunnel.py` — temporary public link via Cloudflare quick tunnel
+- `client/` — web client source (Vite + React + TypeScript + Tailwind); builds into `static/`
+- `static/` — built web client, served by the server
+- `installer/Remote-PC.iss` — Inno Setup script for the Windows installer
+
+## Security notes
+
+⚠️ This is a **personal tool**, not hardened remote-access software.
+
+- The server binds to `127.0.0.1` (localhost) by default — only your own PC can reach it.
+- **Do not expose port 8765 directly to the internet.** Use the built-in public link or a VPN (Tailscale, WireGuard) instead.
+- Traffic between browser and server is plain HTTP/WS on localhost (fine) — the Cloudflare public link adds HTTPS end-to-end from the browser.
+- Anyone who can reach the server and knows the password can control your mouse and keyboard.
 
 ## Build from source
 
-Requires Python 3.11+.
+Requires Python 3.11+ and Node.js.
 
-1. Install dependencies: `pip install pyinstaller fastapi "uvicorn[standard]" mss pillow pynput`
-2. Build the exe (from the repo root):
+1. Server/app dependencies: `pip install fastapi "uvicorn[standard]" mss pillow pynput customtkinter pystray`
+2. Web client (from `client/`): `npm install && npm run build` — output lands in `static/`
+3. Desktop exe (from repo root):
    ```
-   python -m PyInstaller --onefile --name remote-pc --icon assets/icon.ico --add-data "static;static" server.py
+   python -m PyInstaller --onefile --windowed --name remote-pc --icon assets/icon.ico --add-data "static;static" --add-data "assets;assets" app.py
    ```
-3. (Optional) Build the installer with [Inno Setup 6](https://jrsoftware.org/isinfo.php): compile `installer/Remote-PC.iss`.
+4. (Optional) Installer with [Inno Setup 6](https://jrsoftware.org/isinfo.php): compile `installer/Remote-PC.iss`
+
+## Development
+
+- Run the server: `python server.py` (console) or `python app.py` (GUI)
+- Client dev server with hot reload (from `client/`): `npm run dev` — proxies API/WebSocket calls to `localhost:8765`

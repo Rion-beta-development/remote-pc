@@ -5,3 +5,4 @@ server.log
 build/
 dist/
 *.spec
+client/node_modules/

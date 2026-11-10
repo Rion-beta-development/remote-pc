@@ -3,7 +3,7 @@
 ;   iscc installer\Remote-PC.iss
 
 #define AppName "Remote-PC"
-#define AppVersion "1.1.0"
+#define AppVersion "2.0.0"
 #define AppPublisher "Rion-beta-development"
 #define AppExe "remote-pc.exe"
 

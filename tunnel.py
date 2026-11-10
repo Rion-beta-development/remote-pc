@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 PUBLIC_URL_RE = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
@@ -65,49 +66,64 @@ def _watch_for_url(proc, state):
     state["ended"] = True
 
 
+def start_tunnel_process(local_port):
+    """Launch cloudflared without blocking.
+
+    Returns (proc, state) where state is a dict the watcher thread fills
+    with "url" once Cloudflare assigns it (and "ended" if the process
+    exits). Returns (None, None) if cloudflared could not be obtained.
+    """
+    exe = find_cloudflared() or install_cloudflared()
+    if not exe:
+        return None, None
+    proc = subprocess.Popen(
+        [exe, "tunnel", "--url", f"http://127.0.0.1:{local_port}", "--no-autoupdate"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    state = {}
+    threading.Thread(target=_watch_for_url, args=(proc, state), daemon=True).start()
+    return proc, state
+
+
 def start_tunnel(local_port):
     """Start a quick tunnel to http://127.0.0.1:<local_port>.
 
     Prints the public URL once the tunnel is up. Returns the tunnel process,
     or None if cloudflared could not be obtained.
     """
-    exe = find_cloudflared() or install_cloudflared()
-    if not exe:
+    print("Starting temporary public tunnel (cloudflared)...")
+    proc, state = start_tunnel_process(local_port)
+    if proc is None:
         print("ERROR: cloudflared is required for --tunnel but was not found.")
         print("Install it from https://github.com/cloudflare/cloudflared/releases")
         print("or run: winget install Cloudflare.cloudflared")
         return None
 
-    print("Starting temporary public tunnel (cloudflared)...")
-    proc = subprocess.Popen(
-        [exe, "tunnel", "--url", f"http://127.0.0.1:{local_port}", "--no-autoupdate"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-
-    state = {}
-    watcher = threading.Thread(target=_watch_for_url, args=(proc, state), daemon=True)
-    watcher.start()
-    watcher.join(timeout=60)
-
-    if proc.poll() is not None:
-        print("ERROR: cloudflared exited unexpectedly (code %s)." % proc.returncode)
-        return None
-    if "url" not in state:
-        print("ERROR: timed out waiting for the public tunnel URL.")
-        stop_tunnel(proc)
-        return None
-
-    url = state["url"]
-    print("")
-    print("=" * 64)
-    print("  TEMPORARY PUBLIC LINK:  %s" % url)
-    print("=" * 64)
-    print("  Anyone with this link AND your password can control this PC.")
-    print("  Set a strong password with the REMOTE_PC_PASSWORD env var.")
-    print("  The link stops working when you close Remote-PC.")
-    print("")
+    threading.Thread(target=_wait_and_print, args=(proc, state), daemon=True).start()
     return proc
+
+
+def _wait_and_print(proc, state, timeout=60):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if "url" in state:
+            url = state["url"]
+            print("")
+            print("=" * 64)
+            print("  TEMPORARY PUBLIC LINK:  %s" % url)
+            print("=" * 64)
+            print("  Anyone with this link AND your password can control this PC.")
+            print("  Set a strong password with the REMOTE_PC_PASSWORD env var.")
+            print("  The link stops working when you close Remote-PC.")
+            print("")
+            return
+        if proc.poll() is not None:
+            print("ERROR: cloudflared exited unexpectedly (code %s)." % proc.returncode)
+            return
+        time.sleep(0.5)
+    print("ERROR: timed out waiting for the public tunnel URL.")
+    stop_tunnel(proc)
 
 
 def stop_tunnel(proc):
