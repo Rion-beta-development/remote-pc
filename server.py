@@ -17,6 +17,7 @@ import base64
 import io
 import json
 import os
+import sys
 import threading
 import time
 from typing import Optional
@@ -32,6 +33,8 @@ from PIL import Image
 
 from pynput.mouse import Controller as MouseController, Button
 from pynput.keyboard import Controller as KeyboardController, Key
+
+import tunnel
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -274,7 +277,28 @@ def _press_hotkey(keys):
 # Entrypoint
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Remote-PC server")
+    parser.add_argument(
+        "--tunnel",
+        action="store_true",
+        help="Create a temporary public HTTPS link via a Cloudflare quick tunnel",
+    )
+    args = parser.parse_args()
+
     print(f"Remote-PC server starting on http://{HOST}:{PORT}")
     print(f"Password: {PASSWORD}")
     print("Open http://127.0.0.1:8765 in your browser and enter the password.")
-    uvicorn.run(app, host=HOST, port=PORT)
+
+    tunnel_proc = None
+    if args.tunnel:
+        tunnel_proc = tunnel.start_tunnel(PORT)
+        if tunnel_proc is None:
+            sys.exit(1)
+
+    try:
+        uvicorn.run(app, host=HOST, port=PORT)
+    finally:
+        if tunnel_proc is not None:
+            tunnel.stop_tunnel(tunnel_proc)

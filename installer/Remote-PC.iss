@@ -3,7 +3,7 @@
 ;   iscc installer\Remote-PC.iss
 
 #define AppName "Remote-PC"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppPublisher "Rion-beta-development"
 #define AppExe "remote-pc.exe"
 
@@ -39,6 +39,7 @@ Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{group}\{#AppName} (Public Link)"; Filename: "{app}\{#AppExe}"; Parameters: "--tunnel"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 

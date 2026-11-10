@@ -6,8 +6,8 @@ Browser-based remote access for your own Windows PC. Runs a small FastAPI server
 
 Get the latest release from the [Releases page](https://github.com/Rion-beta-development/remote-pc/releases):
 
-- **`Remote-PC-Setup-1.0.0.exe`** — Installer. Downloads, runs the setup wizard, and adds Remote-PC to your Start Menu. Recommended.
-- **`Remote-PC-1.0.0-portable.exe`** — Portable single exe. No installation; just run it.
+- **`Remote-PC-Setup-1.1.0.exe`** — Installer. Downloads, runs the setup wizard, and adds Remote-PC to your Start Menu. Recommended.
+- **`Remote-PC-1.1.0-portable.exe`** — Portable single exe. No installation; just run it.
 
 Then launch Remote-PC and open `http://127.0.0.1:8765` in your browser. The default password is **admin** — change it by setting the `REMOTE_PC_PASSWORD` environment variable before launching (see below).
 
@@ -17,6 +17,23 @@ Then launch Remote-PC and open `http://127.0.0.1:8765` in your browser. The defa
 2. Open `http://127.0.0.1:8765` in your browser.
 3. Enter the password (default: **admin**).
 4. Click the screen to capture input, then move your mouse / type to control the PC.
+
+## Access from the internet (temporary public link)
+
+Run with `--tunnel` to get a **temporary public HTTPS link** (via a [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)) — no router config, no account needed:
+
+- **From source:** double-click `start-tunnel.bat` (or run `python server.py --tunnel`).
+- **Installed:** launch **Remote-PC (Public Link)** from the Start Menu.
+
+The console prints a `https://…trycloudflare.com` link that works from any browser, anywhere. The link dies when you close Remote-PC (Ctrl+C or close the window).
+
+This requires the free `cloudflared` binary — on Windows it is installed automatically via `winget` the first time you use `--tunnel`; otherwise install it manually from [cloudflare/cloudflared](https://github.com/cloudflare/cloudflared/releases).
+
+> ⚠️ **Anyone with the link and your password can fully control your PC over the internet.** Always set a strong password first:
+> ```
+> set REMOTE_PC_PASSWORD=your-strong-password
+> ```
+> Traffic between the browser and Cloudflare is HTTPS; the last hop (Cloudflare → your PC) is plain HTTP on localhost.
 
 ## Stop the server
 
@@ -64,8 +81,10 @@ start.bat
 ## Files
 
 - `server.py` — FastAPI server (screen capture + WebSocket + input injection)
+- `tunnel.py` — Temporary public link via Cloudflare quick tunnel (`--tunnel`)
 - `static/index.html` — Browser client (screen viewer + input capture)
 - `start.bat` — Convenience launcher
+- `start-tunnel.bat` — Launcher with a temporary public link (`--tunnel`)
 - `installer/Remote-PC.iss` — Inno Setup script used to build the Windows installer
 - `assets/` — App icon (PNG + ICO)
 
