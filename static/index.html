@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote-PC — Browser Control</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0b0c10;
+    color: #c5c6c7;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* --- Login screen --- */
+  #login {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #1f2833;
+    z-index: 50;
+  }
+  #login h1 { margin-bottom: 1.5rem; color: #66fcf1; }
+  #login input {
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+    border: 1px solid #45a29e;
+    border-radius: 6px;
+    background: #0b0c10;
+    color: #c5c6c7;
+    margin-bottom: 1rem;
+    width: 260px;
+    text-align: center;
+  }
+  #login button {
+    padding: 0.6rem 1.5rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    background: #45a29e;
+    color: #0b0c10;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  #login button:hover { background: #66fcf1; }
+  #login .err { color: #ff6b6b; margin-top: 0.75rem; font-size: 0.9rem; display: none; }
+
+  /* --- Remote desktop --- */
+  #desktop {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: none;
+    overflow: hidden;
+    background: #000;
+  }
+
+  #viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    cursor: crosshair;
+  }
+
+  #screen {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    /* image-rendering: pixelated; */
+  }
+
+  /* HUD */
+  #hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .hud-pill {
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid #334155;
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    backdrop-filter: blur(4px);
+  }
+  .hud-pill .val { color: #22d3ee; font-weight: 700; margin-left: 6px; }
+
+  /* Overlay hint when not focused */
+  #click-to-focus {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.55);
+    z-index: 20;
+    cursor: pointer;
+  }
+  #click-to-focus h2 { color: #66fcf1; margin-bottom: 0.5rem; }
+  #click-to-focus p { color: #94a3b8; font-size: 0.95rem; }
+  #click-to-focus.hidden { display: none; }
+
+  /* Controls panel (bottom right, small) */
+  #controls {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    gap: 8px;
+    z-index: 10;
+    pointer-events: auto;
+  }
+  #controls button {
+    padding: 6px 14px;
+    border: 1px solid #45a29e;
+    border-radius: 8px;
+    background: rgba(15,23,42,0.8);
+    color: #66fcf1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+  }
+  #controls button:hover { background: #45a29e; color: #0b0c10; }
+  #controls button.active { background: #22d3ee; color: #0b0c10; }
+
+  #status { font-size: 0.75rem; color: #64748b; }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login">
+  <h1>Remote-PC</h1>
+  <input type="password" id="pw" placeholder="Enter password" autocomplete="off">
+  <button id="loginBtn">Connect</button>
+  <div class="err" id="loginErr">Invalid password</div>
+</div>
+
+<!-- Remote desktop -->
+<div id="desktop">
+  <div id="hud">
+    <div class="hud-pill">Status <span class="val" id="statusVal">disconnected</span></div>
+    <div class="hud-pill">FPS <span class="val" id="fpsVal">0</span></div>
+    <div class="hud-pill">Scale <span class="val" id="scaleVal">100%</span></div>
+  </div>
+
+  <div id="viewport">
+    <img id="screen" src="" alt="Remote screen">
+  </div>
+
+  <div id="click-to-focus">
+    <h2>Click to gain control</h2>
+    <p>Click anywhere to capture the screen and start sending input</p>
+  </div>
+
+  <div id="controls">
+    <button id="btnCtrl" class="active">Control: ON</button>
+    <button id="btnFull">Fullscreen</button>
+    <button id="btnCtrlAltDel">Ctrl+Alt+Del</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const WS_URL = `ws://${location.hostname}:${location.port || 8765}/ws`;
+  const AUTH_URL = `${location.origin}/auth`;
+
+  const loginEl = document.getElementById('login');
+  const desktopEl = document.getElementById('desktop');
+  const pwEl = document.getElementById('pw');
+  const loginBtn = document.getElementById('loginBtn');
+  const loginErr = document.getElementById('loginErr');
+
+  const screenImg = document.getElementById('screen');
+  const viewport = document.getElementById('viewport');
+  const focusOverlay = document.getElementById('click-to-focus');
+  const statusVal = document.getElementById('statusVal');
+  const fpsVal = document.getElementById('fpsVal');
+  const scaleVal = document.getElementById('scaleVal');
+  const btnCtrl = document.getElementById('btnCtrl');
+  const btnFull = document.getElementById('btnFull');
+  const btnCad = document.getElementById('btnCtrlAltDel');
+
+  let ws = null;
+  let password = '';
+  let controlEnabled = true;
+  let isPointerLocked = false;
+  let frameCount = 0;
+  let lastFpsTime = performance.now();
+
+  // ---------- Auth ----------
+  async function tryLogin() {
+    password = pwEl.value.trim();
+    if (!password) {
+      loginErr.style.display = 'block';
+      return;
+    }
+    try {
+      const res = await fetch(AUTH_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        loginEl.style.display = 'none';
+        desktopEl.style.display = 'block';
+        connectWS();
+      } else {
+        loginErr.style.display = 'block';
+      }
+    } catch (e) {
+      loginErr.style.display = 'block';
+      console.error(e);
+    }
+  }
+
+  loginBtn.addEventListener('click', tryLogin);
+  pwEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+
+  // ---------- WebSocket ----------
+  function connectWS() {
+    if (ws) { ws.close(); ws = null; }
+    const url = `${WS_URL}?token=${encodeURIComponent(password)}`;
+    ws = new WebSocket(url);
+
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+      statusVal.textContent = 'connected';
+      statusVal.style.color = '#22d3ee';
+      focusOverlay.classList.remove('hidden');
+    };
+
+    ws.onclose = () => {
+      statusVal.textContent = 'disconnected';
+      statusVal.style.color = '#ff6b6b';
+      ws = null;
+      // Reconnect after 2s
+      setTimeout(connectWS, 2000);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'frame') {
+          screenImg.src = 'data:image/jpeg;base64,' + msg.data;
+          // FPS
+          frameCount++;
+          const now = performance.now();
+          if (now - lastFpsTime >= 1000) {
+            fpsVal.textContent = frameCount;
+            frameCount = 0;
+            lastFpsTime = now;
+          }
+        } else if (msg.type === 'pong') {
+          // heartbeat ok
+        }
+      } catch (e) {
+        console.warn('bad ws message', e);
+      }
+    };
+  }
+
+  // ---------- Coordinate mapping ----------
+  // Browser CSS image size vs actual screen resolution
+  let screenW = 0, screenH = 0; // remote screen resolution (from /screen-info)
+  let imgW = 0, imgH = 0;     // rendered image size in CSS pixels
+
+  async function fetchScreenInfo() {
+    try {
+      const res = await fetch(`${location.origin}/screen-info`);
+      const info = await res.json();
+      screenW = info.width;
+      screenH = info.height;
+    } catch (e) {
+      console.warn('screen-info failed', e);
+    }
+  }
+  fetchScreenInfo();
+
+  function remapPoint(clientX, clientY) {
+    const rect = screenImg.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { x: 0, y: 0 };
+    // Clamp to image bounds
+    let x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    let y = Math.max(0, Math.min(clientY - rect.top, rect.height));
+    // Scale from CSS px to remote resolution
+    const rx = Math.round((x / rect.width) * screenW);
+    const ry = Math.round((y / rect.height) * screenH);
+    return { x: rx, y: ry };
+  }
+
+  // ---------- Input capture (only when pointer captured / control ON) ----------
+  function send(type, payload) {
+    if (!controlEnabled) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ ...payload, type }));
+  }
+
+  function onPointerMove(e) {
+    if (!isPointerLocked && !controlEnabled) return;
+    const { x, y } = remapPoint(e.clientX, e.clientY);
+    send('mousemove', { x, y });
+  }
+
+  viewport.addEventListener('mousemove', onPointerMove);
+
+  // Click to focus / capture pointer
+  focusOverlay.addEventListener('click', () => {
+    isPointerLocked = true;
+    focusOverlay.classList.add('hidden');
+    viewport.focus();
+  });
+
+  // Mouse buttons
+  viewport.addEventListener('mousedown', (e) => {
+    if (!isPointerLocked && !controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = remapPoint(e.clientX, e.clientY);
+    const btn = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
+    send('mousedown', { x, y, button: btn });
+  });
+  viewport.addEventListener('mouseup', (e) => {
+    if (!isPointerLocked && !controlEnabled) return;
+    e.preventDefault();
+    const { x, y } = remapPoint(e.clientX, e.clientY);
+    const btn = e.button === 0 ? 'left' : e.button === 2 ? 'right' : 'middle';
+    send('mouseup', { x, y, button: btn });
+  });
+  viewport.addEventListener('contextmenu', (e) => e.preventDefault());
+  viewport.addEventListener('wheel', (e) => {
+    if (!isPointerLocked && !controlEnabled) return;
+    e.preventDefault();
+    send('mousescroll', { dx: 0, dy: Math.sign(e.deltaY) * (Math.abs(e.deltaY) > 100 ? 3 : 1) });
+  }, { passive: false });
+
+  // Keyboard — capture globally when desktop is active and control is on
+  window.addEventListener('keydown', (e) => {
+    if (!controlEnabled || !isPointerLocked) return;
+    // Let browser shortcuts through for some keys? We capture most.
+    const key = e.key;
+    send('keydown', { key });
+    // Also send repeat as type if printable and single char
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (!controlEnabled || !isPointerLocked) return;
+    const key = e.key;
+    send('keyup', { key });
+  }, true);
+
+  // ---------- UI controls ----------
+  btnCtrl.addEventListener('click', () => {
+    controlEnabled = !controlEnabled;
+    btnCtrl.classList.toggle('active', controlEnabled);
+    btnCtrl.textContent = controlEnabled ? 'Control: ON' : 'Control: OFF';
+  });
+
+  btnFull.addEventListener('click', () => {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen();
+  });
+
+  btnCad.addEventListener('click', () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'hotkey', keys: ['ctrl', 'alt', 'delete'] }));
+  });
+
+  // Scale the image to fit; update scale display
+  function updateScale() {
+    const rect = screenImg.getBoundingClientRect();
+    if (!screenW) return;
+    const pct = Math.round((rect.width / screenW) * 100);
+    scaleVal.textContent = pct + '%';
+    imgW = rect.width; imgH = rect.height;
+  }
+  screenImg.addEventListener('load', updateScale);
+  window.addEventListener('resize', updateScale);
+
+  // Heartbeat
+  setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+  }, 5000);
+})();
+</script>
+</body>
+</html>
