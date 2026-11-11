@@ -8,8 +8,8 @@ Remote-PC runs a small FastAPI server on your machine and lets you view + contro
 
 Get the latest release from the [Releases page](https://github.com/Rion-beta-development/remote-pc/releases):
 
-- **`Remote-PC-Setup-2.0.0.exe`** — Installer. Adds Remote-PC to your Start Menu. Recommended.
-- **`Remote-PC-2.0.0-portable.exe`** — Portable single exe. No installation; just run it.
+- **`Remote-PC-Setup-2.1.0.exe`** — Installer. Adds Remote-PC to your Start Menu. Recommended.
+- **`Remote-PC-2.1.0-portable.exe`** — Portable single exe. No installation; just run it.
 
 No Python required — both are standalone builds.
 

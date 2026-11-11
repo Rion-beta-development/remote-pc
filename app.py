@@ -115,6 +115,15 @@ class RemotePcApp(ctk.CTk):
         ctk.CTkLabel(header, text=APP_NAME, font=ctk.CTkFont(size=22, weight="bold")).pack(side="left", padx=10)
         self.status_label = ctk.CTkLabel(header, text="● stopped", text_color="#f87171", font=ctk.CTkFont(size=13))
         self.status_label.pack(side="right")
+        self.top_toggle_button = ctk.CTkButton(
+            header,
+            text="Start server",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            height=38,
+            width=130,
+            command=self.toggle_server,
+        )
+        self.top_toggle_button.pack(side="right", padx=(0, 12))
 
         conn = ctk.CTkFrame(self)
         conn.pack(fill="x", **pad)
@@ -224,13 +233,15 @@ class RemotePcApp(ctk.CTk):
         running = srv_inst is not None and srv_inst.started
         if running:
             self.status_label.configure(text="● running", text_color="#34d399")
-            self.start_stop_button.configure(text="Stop server", fg_color="#b91c1c", hover_color="#7f1d1d")
+            for btn in (self.start_stop_button, self.top_toggle_button):
+                btn.configure(text="Stop server", fg_color="#b91c1c", hover_color="#7f1d1d")
             if self.auto_open_var.get() and not getattr(self, "_opened_once", False):
                 self._opened_once = True
                 webbrowser.open(LOCAL_URL)
         else:
             self.status_label.configure(text="● stopped", text_color="#f87171")
-            self.start_stop_button.configure(text="Start server", fg_color="#1f6aa5", hover_color="#144870")
+            for btn in (self.start_stop_button, self.top_toggle_button):
+                btn.configure(text="Start server", fg_color="#1f6aa5", hover_color="#144870")
         self.after(500, self._poll_server_state)
 
     def stop_server(self) -> None:
@@ -313,6 +324,7 @@ class RemotePcApp(ctk.CTk):
             image = Image.new("RGB", (64, 64), "#0b0c10")
         menu = pystray.Menu(
             pystray.MenuItem("Open " + APP_NAME, lambda: self.after(0, self.show_window)),
+            pystray.MenuItem(self._tray_toggle_text, lambda: self.after(0, self.toggle_server)),
             pystray.MenuItem("Open in browser", lambda: webbrowser.open(self.public_url or LOCAL_URL)),
             pystray.MenuItem(
                 "Copy public link",
@@ -324,6 +336,10 @@ class RemotePcApp(ctk.CTk):
         )
         self.tray_icon = pystray.Icon("remote-pc", image, APP_NAME, menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
+
+    def _tray_toggle_text(self, item) -> str:
+        srv_inst = self.uvicorn_server
+        return "Stop server" if (srv_inst is not None and srv_inst.started) else "Start server"
 
     def minimize_to_tray(self) -> None:
         self.withdraw()
