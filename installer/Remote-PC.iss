@@ -3,7 +3,7 @@
 ;   iscc installer\Remote-PC.iss
 
 #define AppName "Remote-PC"
-#define AppVersion "2.1.0"
+#define AppVersion "2.2.0"
 #define AppPublisher "Rion-beta-development"
 #define AppExe "remote-pc.exe"
 
@@ -45,3 +45,15 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+var
+  ResultCode: Integer;
+begin
+  // Kill any running Remote-PC instance so the install never blocks on it.
+  // ResultCode is ignored: taskkill returns 128 when no process matches.
+  Exec('taskkill.exe', '/F /IM {#AppExe}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
+  Result := True;
+end;
